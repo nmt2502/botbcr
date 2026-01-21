@@ -50,35 +50,36 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (!/^C\d{2}$/i.test(text)) return;
+  if (global.userLock?.has(chatId)) return;
+global.userLock = global.userLock || new Set();
+global.userLock.add(chatId);
 
-  const ban = text.toLowerCase();
+try {
+  const api = `https://bcrvip.onrender.com/api/ban/${ban}`;
+  const res = await axios.get(api, { timeout: 8000 });
+  const data = res.data;
 
-  const loading = await bot.sendMessage(
-    chatId,
-    "⏳ *Đang Phân Tích Bàn...*",
-    { parse_mode: "Markdown" }
-  );
+  if (!data || !data.cau) {
+    throw new Error("API không có dữ liệu cau");
+  }
 
-  try {
-    const api = `https://bcrvip.onrender.com/api/ban/${ban}`;
-    const res = await axios.get(api);
-    const data = res.data;
-    const cau = data.cau;
+  const cau = data.cau;
+  const duDoan = cau.du_doan || "?";
+  const tiLe = cau.do_tin_cay || "?";
+  const mucDo = cau.muc_do_tin_cay || "?";
+  const cauName = cau["Cầu"] || "Không rõ";
+  const chuoi = cau.ket_qua || "";
 
-    const duDoan = cau.du_doan;
-    const tiLe = cau.do_tin_cay;
-    const mucDo = cau.muc_do_tin_cay;
-    const cauName = cau["Cầu"];
-    const chuoi = cau.ket_qua;
-
+  let ketQua = "⏳ Chờ Kết Quả";
+  if (chuoi.length > 0 && duDoan !== "?") {
     const last = chuoi.slice(-1);
-    const ketQua = last === duDoan ? "✅ Thắng" : "❌ Thua";
+    ketQua = last === duDoan ? "✅ Thắng" : "❌ Thua";
+  }
 
-    const resultText =
+  const resultText =
 `🎯 *AI BACCARAT*
 ------------------------
-🏷 *Bàn:* ${data.ban}
+🏷 *Bàn:* ${data.ban || text.toUpperCase()}
 🧠 *Cầu:* ${cauName}
 🤖 *Dự Đoán:* ${duDoan}
 📊 *Tỉ Lệ:* ${tiLe}
@@ -87,11 +88,26 @@ bot.on("message", async (msg) => {
 ------------------------
 🛠 Tool By: *Mai Mai*`;
 
-    await bot.editMessageText(resultText, {
+  await bot.editMessageText(resultText, {
+    chat_id: chatId,
+    message_id: loading.message_id,
+    parse_mode: "Markdown"
+  });
+
+} catch (err) {
+  console.error("API ERROR:", err.message);
+
+  await bot.editMessageText(
+    "❌ *API đang lỗi hoặc ngủ*\n⏳ *Vui lòng thử lại sau*",
+    {
       chat_id: chatId,
       message_id: loading.message_id,
       parse_mode: "Markdown"
-    });
+    }
+  );
+} finally {
+  setTimeout(() => global.userLock.delete(chatId), 5000);
+    }
 
     /* ===== PHÂN TÍCH TIẾP ===== */
     setTimeout(async () => {
