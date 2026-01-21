@@ -1,13 +1,26 @@
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
+const http = require("http");
 
-/* ===== TOKEN (Render ENV) ===== */
+/* ===== HTTP SERVER (BẮT BUỘC CHO RENDER) ===== */
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("AI Baccarat Bot is running");
+}).listen(PORT, () => {
+  console.log("🌐 HTTP Server running on port", PORT);
+});
+
+/* ===== TELEGRAM TOKEN ===== */
 const TOKEN = process.env.BOT_TOKEN || "8481700498:AAGtRCuY5u5xRBPJunwyr36pnzJmBtqhReA";
+if (!TOKEN) {
+  console.error("❌ BOT_TOKEN không tồn tại");
+  process.exit(1);
+}
 
 /* ===== KHỞI TẠO BOT ===== */
 const bot = new TelegramBot(TOKEN, { polling: true });
-
-console.log("🤖 AI Baccarat Bot đang chạy...");
+console.log("🤖 Telegram Bot started");
 
 /* ===== TẠO NÚT C01 → C16 ===== */
 function keyboardBan() {
@@ -45,41 +58,49 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-/* ===== XỬ LÝ CHỌN BÀN ===== */
+/* ===== CHỐNG SPAM ===== */
+const userLock = new Set();
+
+/* ===== CHỌN BÀN ===== */
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (global.userLock?.has(chatId)) return;
-global.userLock = global.userLock || new Set();
-global.userLock.add(chatId);
+  if (!/^C\d{2}$/i.test(text)) return;
+  if (userLock.has(chatId)) return;
 
-try {
-  const api = `https://bcrvip.onrender.com/api/ban/${ban}`;
-  const res = await axios.get(api, { timeout: 8000 });
-  const data = res.data;
+  userLock.add(chatId);
+  const ban = text.toLowerCase();
 
-  if (!data || !data.cau) {
-    throw new Error("API không có dữ liệu cau");
-  }
+  const loading = await bot.sendMessage(
+    chatId,
+    "⏳ *Đang Phân Tích Bàn...*",
+    { parse_mode: "Markdown" }
+  );
 
-  const cau = data.cau;
-  const duDoan = cau.du_doan || "?";
-  const tiLe = cau.do_tin_cay || "?";
-  const mucDo = cau.muc_do_tin_cay || "?";
-  const cauName = cau["Cầu"] || "Không rõ";
-  const chuoi = cau.ket_qua || "";
+  try {
+    const api = `https://bcrvip.onrender.com/api/ban/${ban}`;
+    const res = await axios.get(api, { timeout: 8000 });
+    const data = res.data;
 
-  let ketQua = "⏳ Chờ Kết Quả";
-  if (chuoi.length > 0 && duDoan !== "?") {
-    const last = chuoi.slice(-1);
-    ketQua = last === duDoan ? "✅ Thắng" : "❌ Thua";
-  }
+    if (!data || !data.cau) throw new Error("API sai format");
 
-  const resultText =
+    const cau = data.cau;
+    const duDoan = cau.du_doan;
+    const tiLe = cau.do_tin_cay;
+    const mucDo = cau.muc_do_tin_cay;
+    const cauName = cau["Cầu"];
+    const chuoi = cau.ket_qua || "";
+
+    let ketQua = "⏳ Chờ Kết Quả";
+    if (chuoi.length > 0) {
+      ketQua = chuoi.slice(-1) === duDoan ? "✅ Thắng" : "❌ Thua";
+    }
+
+    const textResult =
 `🎯 *AI BACCARAT*
 ------------------------
-🏷 *Bàn:* ${data.ban || text.toUpperCase()}
+🏷 *Bàn:* ${data.ban}
 🧠 *Cầu:* ${cauName}
 🤖 *Dự Đoán:* ${duDoan}
 📊 *Tỉ Lệ:* ${tiLe}
@@ -88,66 +109,23 @@ try {
 ------------------------
 🛠 Tool By: *Mai Mai*`;
 
-  await bot.editMessageText(resultText, {
-    chat_id: chatId,
-    message_id: loading.message_id,
-    parse_mode: "Markdown"
-  });
-
-} catch (err) {
-  console.error("API ERROR:", err.message);
-
-  await bot.editMessageText(
-    "❌ *API đang lỗi hoặc ngủ*\n⏳ *Vui lòng thử lại sau*",
-    {
-      chat_id: chatId,
-      message_id: loading.message_id,
-      parse_mode: "Markdown"
-    }
-  );
-} finally {
-  setTimeout(() => global.userLock.delete(chatId), 5000);
-    }
-
-    /* ===== PHÂN TÍCH TIẾP ===== */
-    setTimeout(async () => {
-      const loading2 = await bot.sendMessage(
-        chatId,
-        "🤖 *AI Đang Phân Tích...*",
-        { parse_mode: "Markdown" }
-      );
-
-      const res2 = await axios.get(api);
-      const c2 = res2.data.cau;
-
-      const last2 = c2.ket_qua.slice(-1);
-      const ketQua2 = last2 === c2.du_doan ? "✅ Thắng" : "❌ Thua";
-
-      const finalText =
-`🎯 *AI BACCARAT*
-------------------------
-🏷 *Bàn:* ${text.toUpperCase()}
-🧠 *Cầu:* ${c2["Cầu"]}
-🤖 *Dự Đoán:* ${c2.du_doan}
-📊 *Tỉ Lệ:* ${c2.do_tin_cay}
-🔥 *Độ Mạnh:* ${c2.muc_do_tin_cay}
-📌 *Kết Quả:* ${ketQua2}
-------------------------
-🛠 Tool By: *Mai Mai*`;
-
-      await bot.editMessageText(finalText, {
-        chat_id: chatId,
-        message_id: loading2.message_id,
-        parse_mode: "Markdown"
-      });
-
-    }, 4000);
-
-  } catch (err) {
-    await bot.editMessageText("❌ *Lỗi API – thử lại sau*", {
+    await bot.editMessageText(textResult, {
       chat_id: chatId,
       message_id: loading.message_id,
       parse_mode: "Markdown"
     });
+
+  } catch (err) {
+    console.error("API ERROR:", err.message);
+    await bot.editMessageText(
+      "❌ *API đang lỗi hoặc ngủ*\n⏳ *Thử lại sau*",
+      {
+        chat_id: chatId,
+        message_id: loading.message_id,
+        parse_mode: "Markdown"
+      }
+    );
+  } finally {
+    setTimeout(() => userLock.delete(chatId), 5000);
   }
 });
