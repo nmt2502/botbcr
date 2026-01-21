@@ -1,0 +1,13 @@
+{
+  "name": "botbcr",
+  "version": "1.0.0",
+  "description": "Telegram AI Baccarat Bot - Render 24/24",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "node-telegram-bot-api": "^0.64.0"
+  }
+}
